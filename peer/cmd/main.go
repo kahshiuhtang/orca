@@ -19,7 +19,7 @@ func main() {
 	os.MkdirAll("./files/stored/", 0755)
 
 	cmd := exec.Command("./OrcaNetAPIServer")
-	cmd.Dir = "../coin/"
+	cmd.Dir = "../coin/server/"
 	err := cmd.Start()
 	if err != nil {
 		fmt.Printf("Error starting OrcaNetAPIServer: %s\n", err)
