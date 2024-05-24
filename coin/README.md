@@ -1,3 +1,4 @@
+
 # API Server wrapper for OrcaNet(full node) and the OrcaWallet, and Btcctl 
 
 To get started with running btcd and btcwallet, navigate into the coin directory:
@@ -107,5 +108,4 @@ It sends `num-coins` to `recipient-address` by first using `senderwalletpass` to
 ```
 
 `http://localhost:3333/stopMine` --> Restarts the OrcaNet node to a non mining instance. 
-
 
