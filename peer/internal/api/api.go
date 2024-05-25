@@ -105,9 +105,13 @@ type FileInfo struct {
 	Lastmodified string `json:"lastmodified"`
 }
 
+type StatusUpdate struct {
+	Status string `json:"status"`
+}
+
 func writeStatusUpdate(w http.ResponseWriter, message string) {
-	responseMsg := map[string]interface{}{
-		"status": message,
+	responseMsg := StatusUpdate{
+		Status: message,
 	}
 	responseMsgJsonString, err := json.Marshal(responseMsg)
 	if err != nil {
