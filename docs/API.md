@@ -1,96 +1,88 @@
 # API ROUTES
 
-Here are the API routes that the peer node exposes to the front end.
+Here are the API routes that the peer node exposes to the front end. 
 
 ## PUT /add-job
 
 Request
 
-{ }
+{ fileHash: string, peerId: string }
 
 Response 
 
-{ }
+{ jobID: string }
 
-## GET /find-peers
+## GET /find-peer?fileHash=
 
 Request
 
-{ }
+fileHash: string
 
 Response 
 
-{ }
+[{ peerId: string, ip: string, region: string, price: float32 }]
 
 ## GET /job-list
 
-Request
-
-{ }
-
 Response 
 
-{ }
+[{ fileHash: string jobId: string, timeQueueued: string, status: string, accumulatedCost: string, projectedCost: string, eta: int, peerId: string }]
 
-## GET /job-info
+## GET /job-info?jobId=
 
 Request
 
-{ }
+JobId: string
 
 Response 
 
-{ }
+{ fileHash: string jobId: string, timeQueueued: string, status: string, accumulatedCost: string, projectedCost: string, eta: int, peerId: string }
 
 ## POST /start-jobs
 
 Request
 
-{ }
+[{ jobId: string }]
 
 Response 
 
-{ }
+{ status: string }
 
 ## POST /pause-jobs
 
 Request
 
-{ }
+[{ jobId: string }]
 
 Response 
 
-{ }
+{ status: string }
 
 ## POST /terminate-jobs
 
-Request
+Request:
 
-{ }
+[{ jobId: string }]
 
 Response 
 
-{ }
+{ status: string }
 
 ## GET /get-history
 
-Request
-
-{ }
-
 Response 
 
-{ }
+[{ fileHash: string jobId: string, timeQueueued: string, status: string, accumulatedCost: string, projectedCost: string, eta: int, peerId: string }]
 
 ## POST /remove-from-history
   
 Request
 
-{ }
+{ jobId: string }
 
 Response 
 
-{ }
+{ status: string }
 
 ## POST /clear-history 
 
@@ -100,67 +92,65 @@ Request
 
 Response 
 
-{ }
+{ status: string }
 
 ## GET /file/:hash/info
 
 Request
 
-{ }
+hash: string
 
 Response 
 
-{ }
+{ name: string, size: int, numberOfPeers: int, listProducers: []string }
 
 ## POST /upload
 
 Request
 
-{ }
+{ hash: string }
 
 Response 
 
-{ }
+{ filePath: string, price: int64 }
 
 ## DELETE /file/:hash
 
 Request
 
-{ }
+hash: string
 
 Response 
 
-{ }
+{ status: string }
 
-## GET /get-peer
+## GET /get-peer?peer-id=
 
 Request
 
-{ }
+peer-id: string
 
 Response 
 
-{ }
+{ location: string, latency: string, peerId: string, connection: string, openStream: string, flagUrl: string }
 
 ## GET /get-peers
 
 Request
 
-{ }
-
 Response 
 
-{ }
+[ { location: string, latency: string, peerId: string, connection: string, openStream: string, flagUrl: string } ]
 
 ## POST /remove-peer
 
 Request
 
-{ }
+{ peerId: string }
 
 Response 
 
-{ }
+{ status: string }
 
 ## GET /wallet/balance
 
@@ -226,11 +216,11 @@ Response
 
 Request
 
-{ }
+{ pub_key: string }
 
 Response 
 
-{ }
+{ _id: string, pub_key: string, incoming_speed: string, outgoing_speed: string }
 
 ## GET /activity
 
