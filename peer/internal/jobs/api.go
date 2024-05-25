@@ -10,13 +10,13 @@ import (
 
 type Job struct {
 	FileHash        string `json:"fileHash"`
-	JobId           string `json:"jobID"`
+	JobId           string `json:"jobId"`
 	TimeQueued      string `json:"timeQueued"`
 	Status          string `json:"status"`
 	AccumulatedCost int    `json:"accumulatedCost"`
 	ProjectedCost   int    `json:"projectedCost"`
 	ETA             int    `json:"eta"`
-	PeerId          string `json:"peer"`
+	PeerId          string `json:"peerId"`
 }
 
 type JobManager struct {
@@ -26,17 +26,17 @@ type JobManager struct {
 }
 
 type FileChunkRequest struct {
-	FileHash        string `json:"fileHash"`
-	ChunkIndex           int `json:"chunkIndex"`
-	JobId 				string `json:"jobId"`
+	FileHash   string `json:"fileHash"`
+	ChunkIndex int    `json:"chunkIndex"`
+	JobId      string `json:"jobId"`
 }
 
 type FileChunk struct {
-	FileHash        string `json:"fileHash"`
-	ChunkIndex           int `json:"chunkIndex"`
-	MaxChunk           int `json:"maxChunk"`
-	JobId              string `json:"jobId"`
-	Data               []byte `json:"data"`
+	FileHash   string `json:"fileHash"`
+	ChunkIndex int    `json:"chunkIndex"`
+	MaxChunk   int    `json:"maxChunk"`
+	JobId      string `json:"jobId"`
+	Data       []byte `json:"data"`
 }
 
 var Manager JobManager
@@ -102,7 +102,7 @@ func writeStatusUpdate(w http.ResponseWriter, message string) {
 }
 
 type RmFromHistoryReqPayload struct {
-	JobId string `json:"jobID"`
+	JobId string `json:"jobId"`
 }
 
 func RemoveFromHistoryHandler(w http.ResponseWriter, r *http.Request) {
@@ -135,6 +135,7 @@ func ClearHistoryHandler(w http.ResponseWriter, r *http.Request) {
 		ClearHistory()
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
+		writeStatusUpdate(w, "success")
 	} else {
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		writeStatusUpdate(w, "Only PATCH requests will be handled.")
@@ -143,7 +144,7 @@ func ClearHistoryHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 type JobInfoReqPayload struct {
-	JobId string `json:"jobID"`
+	JobId string `json:"jobId"`
 }
 
 func JobInfoHandler(w http.ResponseWriter, r *http.Request) {

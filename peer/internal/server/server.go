@@ -15,12 +15,13 @@ import (
 	"orca-peer/internal/fileshare"
 	"orca-peer/internal/hash"
 	orcaJobs "orca-peer/internal/jobs"
-	"github.com/libp2p/go-libp2p/core/host"
-	libp2pcrypto "github.com/libp2p/go-libp2p/core/crypto"
 	"os"
 	"path/filepath"
 	"time"
+
 	"github.com/google/uuid"
+	libp2pcrypto "github.com/libp2p/go-libp2p/core/crypto"
+	"github.com/libp2p/go-libp2p/core/host"
 )
 
 const keyServerAddr = "serverAddr"
@@ -134,7 +135,7 @@ func StartServer(httpPort string, dhtPort string, rpcPort string, serverReady ch
 }
 
 type Peer struct {
-	PeerId string  `json:"peerID"`
+	PeerId string  `json:"peerId"`
 	Ip     string  `json:"ip"`
 	Region string  `json:"region"`
 	Price  float32 `json:"price"`

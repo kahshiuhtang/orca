@@ -7,7 +7,7 @@ import (
 )
 
 type PeerIdPOSTPayload struct {
-	PeerID string `json:"peerID"`
+	PeerID string `json:"peerId"`
 }
 
 func getAllPeers(w http.ResponseWriter, r *http.Request) {
@@ -71,8 +71,10 @@ func removePeer(w http.ResponseWriter, r *http.Request) {
 		err := DisconnectPeer(payload.PeerID)
 		if err != nil {
 			w.WriteHeader(http.StatusBadRequest)
+			writeStatusUpdate(w, "Bad Request, was not able to disconnect this peer id")
 		} else {
 			w.WriteHeader(http.StatusOK)
+			writeStatusUpdate(w, "Success")
 		}
 	} else {
 		w.WriteHeader(http.StatusMethodNotAllowed)
