@@ -88,23 +88,6 @@ $ exit
 
 Here is all of the routes available on the HTTP server that is started when the peer-node loads. Most routes should return 400 if an issue with the parameters sent by the client did not work, 405 if the wrong method type (GET, POST) was used, 500 if there was an error creating, searching or opening files and 200 if everything is successful. If a response is sent inside of an array, that indicates that at minimum, 0 json objects could be sent but more than 1 json object could also be inside of that json array. If not explicitly stated, the Response Body should be a json object with a single field name "status", explaing the current status of the request. Furthermore, when any response code other than 200 is sent, there should be this same json object sent inside the Response Body.
 
----
-
-Routes should follow the API laid out in the document from the front end team. 
-
-
-Some additional internal routes we added for communicating between peer nodes are below. These should be peer to peer only, not front-end to peer.
-
-/requestFile/
-/sendTransaction
-/writeFile
-/sendMoney
-/getLocation
-/getAllStored
-/get-file
-/upload-file
-/delete-file
-
 The blockchain routes that currently exist are as follows. We still need to fix it to match the specification.
 
 /getBlockchainInfo
@@ -112,9 +95,3 @@ The blockchain routes that currently exist are as follows. We still need to fix 
 /getBalance
 /mine
 /sendToAddress
-
-Settings have not been implmented. Are we keeping it on the front-end?
-
-Statistics are also a work in progress.
-
-All other routes, should be as follows on the API document.

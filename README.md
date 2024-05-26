@@ -99,10 +99,28 @@ make all
 This will start up the peer node. You should see output in the terminal. You will need to enter in <i>three</i> numbers into the terminal before the peer node is fully running. These three numbers will be the port numbers used by the peer node to connect with various services. There is no agrred upon port number, but currently, these three ports can be the official
 
 ## TODO
-### Features that should be implemented in future pull requests
-1. **Team Sea Dolphins DHT Bad Address Connection** 
+
+Here are some things that can be implemented in the future / improved upon the existing repository.
+
+1. **DHT Bad Address Connection** 
     - Implement the Sea Dolphins method of trying to reconnect to a peer on a bad address 3 times and then removing it from the peer's address book. 
 2. **NAT Address Translation** 
     - Right now the peer node will join the DHT in client mode by default, which will only allow it to send out queries and not respond to them. The desired functionality is to join the DHT as a server node automatically if it can be determined that we can reach the node behind the NAT.
-3. **NAT File Request**
-    - Trying to store a file on a host that is behind a NAT will lead to an IO timeout. The peer will attempt to retrieve such a file, but will be unsuccessful. The peer can store a file on an address behind a NAT, whether or not this is allowed needs to be determined.
+3. **NAT Holepunch / Relay**
+    - Peer to peer functionality does not work due to hosts being behind a NAT. Maybe one of these libariees [1](https://github.com/malcolmseyd/natpunch-go) or [2](https://github.com/shawwwn/Gole). I think there was also an attempt to use relays
+4. **Lightning Network**
+    - Need to implement a network on top of the existing blockchain to speed up transactions. 
+5. **Coin Transfer Verification**
+    - There is not any system in place that will check to see if a transaction has gone through during the transfer of a file. 
+6. **Reputation System**
+    - Keep track of the good and bad actors in the network. 
+7. **Producer Peer Disconnect**
+    - Not sure how to title this, but when one peer disconnects, there should a mechanism where the connection automatically switches to another peer (preferably the cheapest priced option) to continue the file transfers
+8. **Documentation Update**
+    - Fix any inconsistencies in API routes or CLI. In addition, it would be nice to document the internal functions.
+9. **Switch to use a CLI library**
+    - Cobra CLI is an option. There is just a for loop that takes input. This is not ideal.
+10. **Tracking activity**
+    - It would be nice for the front-end teams to be able to display some visualization of what cryptocurrency has been sent around from this peer. In addition, more work could be done to improve the tracking of what type of files are being sent around but this could be tricky, as files as sent in hashes.
+11. **Add unit tests**
+    - We was lackadaisical on creating unit tests for the functions. Hopefully we will add in new functions to help ensure the validity of our code.
