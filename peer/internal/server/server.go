@@ -191,22 +191,6 @@ func (server *HTTPServer) sendFile(w http.ResponseWriter, r *http.Request, confi
 	// Extract filename from URL path
 	filename := r.URL.Path[len("/requestFile/"):]
 
-	// Ask for confirmation
-	// *confirming = true
-	// fmt.Printf("You have just received a request to send file '%s'. Do you want to send the file? (yes/no): ", filename)
-
-	// // Check if confirmation is received
-	// for *confirmation != "yes" {
-	// 	if *confirmation != "" {
-	// 		http.Error(w, fmt.Sprintf("Client declined to send file '%s'.", filename), http.StatusUnauthorized)
-	// 		*confirmation = ""
-	// 		*confirming = false
-	// 		return
-	// 	}
-	// }
-	// *confirmation = ""
-	// *confirming = false
-
 	file, err := os.Open("./files/stored/" + filename)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusNotFound)
