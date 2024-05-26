@@ -231,3 +231,32 @@ Request
 Response 
 
 { }
+
+
+## The routes below are not associated with any front-end functionality. They are mainly intended for peer to peer backend communication.
+
+## GET /requestFile/:filename
+
+Request
+
+fileName: string
+
+Response
+
+bytes, representing parts of a file
+
+## GET /sendTransaction
+
+## GET /writeFile
+
+## GET /sendMoney
+
+## GET /getLocation
+
+## GET /getAllStored
+
+## GET /get-file
+
+## GET /upload-file
+
+## GET /delete-file
