@@ -16,15 +16,16 @@ import (
 	orcaHash "orca-peer/internal/hash"
 	"orca-peer/internal/server"
 	orcaServer "orca-peer/internal/server"
-	"github.com/libp2p/go-libp2p"
-	libp2pcrypto "github.com/libp2p/go-libp2p/core/crypto"
-	"github.com/multiformats/go-multiaddr"
 	orcaStatus "orca-peer/internal/status"
 	orcaStore "orca-peer/internal/store"
 	"os"
 	"os/exec"
 	"strconv"
 	"strings"
+
+	"github.com/libp2p/go-libp2p"
+	libp2pcrypto "github.com/libp2p/go-libp2p/core/crypto"
+	"github.com/multiformats/go-multiaddr"
 )
 
 var (
@@ -33,31 +34,63 @@ var (
 	Client *orcaClient.Client
 )
 
+type Settings struct {
+	MarketRPCPort      string `json:"RPC_PORT"`
+	MarketDHTPort      string `json:"DHT_PORT"`
+	HTTPAPIPort        string `json:"API_PORT"`
+	BlockchainPassword string `json:"BLOCKCHAIN_PW"`
+}
+
+func loadSetttings() (Settings, error) {
+	jsonFile, err := os.Open("config/settings.json")
+	if err != nil {
+		return Settings{}, err
+	}
+	defer jsonFile.Close()
+	byteValue, err := io.ReadAll(jsonFile)
+	if err != nil {
+		fmt.Println(err)
+		return Settings{}, err
+	}
+	var settings Settings
+	err = json.Unmarshal(byteValue, &settings)
+	if err != nil {
+		return Settings{}, err
+	}
+	for settings.MarketRPCPort == "" || settings.MarketDHTPort == "" || settings.HTTPAPIPort == "" || settings.BlockchainPassword == "" {
+		if settings.MarketRPCPort == "" {
+			settings.MarketRPCPort = getPort("Market RPC Server")
+		}
+		if settings.MarketDHTPort == "" {
+			settings.MarketDHTPort = getPort("Market DHT Host")
+		}
+		if settings.HTTPAPIPort == "" {
+			settings.HTTPAPIPort = getPort("HTTP Server")
+		}
+		if settings.BlockchainPassword == "" {
+			settings.BlockchainPassword = getPassKey()
+		}
+	}
+	return settings, nil
+}
 func StartCLI(bootstrapAddress *string, pubKey *rsa.PublicKey, privKey *rsa.PrivateKey, orcaNetAPIProc *exec.Cmd, startAPIRoutes func(*map[string]fileshare.FileInfo)) {
 	fmt.Println("Loading...")
-	rpcPort := getPort("Market RPC Server")
-	dhtPort := getPort("Market DHT Host")
-	httpPort := getPort("HTTP Server")
-	passKey := getPassKey()
-	for httpPort == "" || rpcPort == "" || dhtPort == "" || passKey == "" {
-		fmt.Println("All three ports must be given, please try again.")
-		rpcPort = getPort("Market RPC Server")
-		dhtPort = getPort("Market DHT Host")
-		httpPort = getPort("HTTP Server")
-		passKey = getPassKey()
+	settings, err := loadSetttings()
+	if err != nil {
+		log.Fatal("unable to load settings")
 	}
 	serverReady := make(chan bool)
 	confirming := false
 	confirmation := ""
 	locationJsonString := orcaStatus.GetLocationData()
 	var locationJson map[string]interface{}
-	err := json.Unmarshal([]byte(locationJsonString), &locationJson)
+	err = json.Unmarshal([]byte(locationJsonString), &locationJson)
 	if err != nil {
 		fmt.Println("Unable to establish user IP, please try again")
 		return
 	}
 	Ip = locationJson["ip"].(string)
-	Port, err = strconv.ParseInt(httpPort, 10, 64)
+	Port, err = strconv.ParseInt(settings.HTTPAPIPort, 10, 64)
 	if err != nil {
 		fmt.Println("Error parsing in port: must be a integer.", err)
 		return
@@ -70,7 +103,7 @@ func StartCLI(bootstrapAddress *string, pubKey *rsa.PublicKey, privKey *rsa.Priv
 	}
 
 	//Construct multiaddr from string and create host to listen on it
-	sourceMultiAddr, _ := multiaddr.NewMultiaddr(fmt.Sprintf("/ip4/0.0.0.0/tcp/%s", dhtPort))
+	sourceMultiAddr, _ := multiaddr.NewMultiaddr(fmt.Sprintf("/ip4/0.0.0.0/tcp/%s", settings.MarketDHTPort))
 	opts := []libp2p.Option{
 		libp2p.ListenAddrStrings(sourceMultiAddr.String()),
 		libp2p.Identity(libp2pPrivKey), //derive id from private key
@@ -97,7 +130,7 @@ func StartCLI(bootstrapAddress *string, pubKey *rsa.PublicKey, privKey *rsa.Priv
 	Client.PrivateKey = privKey
 	Client.PublicKey = pubKey
 	Client.Host = host
-	go orcaServer.StartServer(httpPort, dhtPort, rpcPort, serverReady, &confirming, &confirmation, libp2pPrivKey, passKey, Client, startAPIRoutes, host, hostMultiAddr)
+	go orcaServer.StartServer(orcaServer.Settings(settings), serverReady, &confirming, &confirmation, libp2pPrivKey, Client, startAPIRoutes, host, hostMultiAddr)
 	<-serverReady
 	orcaBlockchain.InitBlockchainStats(pubKey)
 	fmt.Println("Welcome to Orcanet!")
@@ -163,8 +196,8 @@ func StartCLI(bootstrapAddress *string, pubKey *rsa.PublicKey, privKey *rsa.Priv
 					log.Fatal("not an RSA public key")
 				}
 				key := orcaServer.ConvertKeyToString(rsaPubKey.N, rsaPubKey.E)
-				err = Client.GetFileOnce(bestHolder.GetIp(), bestHolder.GetPort(), args[0], key, fmt.Sprintf("%d", bestHolder.GetPrice()), passKey, "")
-				
+				err = Client.GetFileOnce(bestHolder.GetIp(), bestHolder.GetPort(), args[0], key, fmt.Sprintf("%d", bestHolder.GetPrice()), settings.BlockchainPassword, "")
+
 				if err != nil {
 					fmt.Printf("Error getting file %s", err)
 				}

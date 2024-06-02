@@ -99,15 +99,22 @@ func handleTransaction(w http.ResponseWriter, r *http.Request) {
 	fmt.Println("> ")
 }
 
+type Settings struct {
+	MarketRPCPort      string `json:"RPC_PORT"`
+	MarketDHTPort      string `json:"DHT_PORT"`
+	HTTPAPIPort        string `json:"API_PORT"`
+	BlockchainPassword string `json:"BLOCKCHAIN_PW"`
+}
+
 // Start HTTP/RPC server
-func StartServer(httpPort string, dhtPort string, rpcPort string, serverReady chan bool, confirming *bool, confirmation *string, libp2pPrivKey libp2pcrypto.PrivKey, passKey string, client *orcaClient.Client, startAPIRoutes func(*map[string]fileshare.FileInfo), host host.Host, hostMultiAddr string) {
+func StartServer(settings Settings, serverReady chan bool, confirming *bool, confirmation *string, libp2pPrivKey libp2pcrypto.PrivKey, client *orcaClient.Client, startAPIRoutes func(*map[string]fileshare.FileInfo), host host.Host, hostMultiAddr string) {
 	eventChannel = make(chan bool)
 	server := HTTPServer{
 		storage: hash.NewDataStore("files/stored/"),
 	}
 	go orcaJobs.InitPeriodicJobSave()
 	Client = client
-	PassKey = passKey
+	PassKey = settings.BlockchainPassword
 	fileShareServer := FileShareServerNode{
 		StoredFileInfoMap: make(map[string]fileshare.FileInfo),
 	}
@@ -127,11 +134,11 @@ func StartServer(httpPort string, dhtPort string, rpcPort string, serverReady ch
 
 	http.HandleFunc("/add-job", AddJobHandler)
 
-	fmt.Printf("HTTP Listening on port %s...\n", httpPort)
-	go CreateMarketServer(libp2pPrivKey, dhtPort, rpcPort, serverReady, &fileShareServer, host, hostMultiAddr)
+	fmt.Printf("HTTP Listening on port %s...\n", settings.HTTPAPIPort)
+	go CreateMarketServer(libp2pPrivKey, settings.MarketDHTPort, settings.MarketRPCPort, serverReady, &fileShareServer, host, hostMultiAddr)
 	startAPIRoutes(&fileShareServer.StoredFileInfoMap)
 
-	http.ListenAndServe(":"+httpPort, nil)
+	http.ListenAndServe(":"+settings.HTTPAPIPort, nil)
 }
 
 type Peer struct {

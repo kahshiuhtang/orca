@@ -3,13 +3,13 @@ package hash
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"orca-peer/internal/fileshare"
 	"os"
 	"strings"
-	"io/ioutil"
-	"errors"
 )
 
 type FileChunk struct {
@@ -17,8 +17,8 @@ type FileChunk struct {
 	BytesRead int64
 }
 
-//Returns hash key, fileinfo struct, and error if any
-//will write individual chunks to /files/stored
+// Returns hash key, fileinfo struct, and error if any
+// will write individual chunks to /files/stored
 func SaveChunkedFile(filePath string, fileName string) (string, fileshare.FileInfo, error) {
 	file, err := os.Open(filePath)
 	if err != nil {
@@ -42,7 +42,7 @@ func SaveChunkedFile(filePath string, fileName string) (string, fileshare.FileIn
 		hasher.Write(chunk[:bytesRead])
 		hash := hasher.Sum(nil)
 		hashedFiles.Hashes = append(hashedFiles.Hashes, hex.EncodeToString(hash))
-		err = ioutil.WriteFile("./files/stored/" + hex.EncodeToString(hash), chunk, 0777)
+		err = ioutil.WriteFile("./files/stored/"+hex.EncodeToString(hash), chunk, 0777)
 		if err != nil {
 			//clean up any written hashes
 			for _, chunkHash := range hashedFiles.Hashes {
