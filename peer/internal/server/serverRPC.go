@@ -10,9 +10,11 @@ package server
 
 import (
 	"bufio"
-	"context"
-	"errors"
 	"bytes"
+	"context"
+	"encoding/binary"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -24,24 +26,27 @@ import (
 	"os"
 	"strings"
 	"sync"
-	"encoding/json"
-	"encoding/binary"
 	"time"
+
 	"github.com/go-ping/ping"
 	dht "github.com/libp2p/go-libp2p-kad-dht"
 	record "github.com/libp2p/go-libp2p-record"
 	libp2pcrypto "github.com/libp2p/go-libp2p/core/crypto"
-	"github.com/libp2p/go-libp2p/core/protocol"
-	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/host"
+	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
+	"github.com/libp2p/go-libp2p/core/protocol"
 	drouting "github.com/libp2p/go-libp2p/p2p/discovery/routing"
 	dutil "github.com/libp2p/go-libp2p/p2p/discovery/util"
+	"github.com/multiformats/go-multiaddr"
 	ma "github.com/multiformats/go-multiaddr"
 	"github.com/oschwald/geoip2-golang"
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/emptypb"
+
+	"github.com/libp2p/go-libp2p/p2p/protocol/circuitv2/client"
+	// "github.com/libp2p/go-libp2p/core/network"
 )
 
 type FileShareServerNode struct {
@@ -51,17 +56,18 @@ type FileShareServerNode struct {
 	PubKey            libp2pcrypto.PubKey
 	V                 record.Validator
 	StoredFileInfoMap map[string]fileshare.FileInfo //This is the list of files we are storing
-	Host host.Host
-	HostMultiAddr string
+	Host              host.Host
+	HostMultiAddr     string
 }
 
 var (
 	serverStruct FileShareServerNode
 	peerTable    map[string]PeerInfo
 	peerTableMUT sync.Mutex
+	relay1info   peer.AddrInfo // will potentially find a better place to put this later
 )
 
-func CreateMarketServer(privKey libp2pcrypto.PrivKey, dhtPort string, rpcPort string, serverReady chan bool, fileShareServer *FileShareServerNode, host host.Host, hostMultiAddr string) {
+func CreateMarketServer(dhtPort string, rpcPort string, serverReady chan bool, fileShareServer *FileShareServerNode, host host.Host, hostMultiAddr string, privKey libp2pcrypto.PrivKey) {
 	ctx := context.Background()
 
 	bootstrapPeers := ReadBootstrapPeers()
@@ -84,11 +90,20 @@ func CreateMarketServer(privKey libp2pcrypto.PrivKey, dhtPort string, rpcPort st
 		panic(err)
 	}
 
+	// Will put in better place later
+	// Just adding 1st bootstrap as peer now
+	bootstrapAddr := "/ip4/194.113.73.99/tcp/44981/p2p/QmZyLQd66AYP9sPxGbdjqZ5Ys76ZBaFFJy5PwzXxosXz74"
+	maddr, _ := multiaddr.NewMultiaddr(bootstrapAddr)
+	peerInfo, _ := peer.AddrInfoFromP2pAddr(maddr)
+	relay1info = *peerInfo
+	log.Printf("Relay with ID: %s, Addrs: %v", relay1info.ID, relay1info.Addrs)
+
 	// Let's connect to the bootstrap nodes first. They will tell us about the
 	// other nodes in the network.
 	var wg sync.WaitGroup
 	for _, peerAddr := range bootstrapPeers {
 		peerinfo, _ := peer.AddrInfoFromP2pAddr(peerAddr)
+
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -288,7 +303,61 @@ func DiscoverPeers(ctx context.Context, h host.Host, kDHT *dht.IpfsDHT, advertis
 			if peer.ID == h.ID() {
 				continue // No self connection
 			}
-			h.Connect(ctx, peer)
+
+			// The following code needs to be on the bootstrap server to enable relay services. relay1
+			// is of type Host:
+
+			// _, err = relay.New(relay1)
+			// if err != nil {
+			// 	log.Printf("Failed to instantiate the relay: %v", err)
+			// 	return
+			// }
+
+			// Connect to relay1
+			log.Printf("Attempting to connect to relay with ID: %s, Addrs: %v", relay1info.ID, relay1info.Addrs)
+			if err := h.Connect(context.Background(), relay1info); err != nil {
+				log.Printf("Failed to connect host and relay1: %v", err)
+				return
+			}
+
+			// Non-optional step. Probably don't close it though? Will check more
+			h.SetStreamHandler("/customprotocol", func(s network.Stream) {
+				log.Println("Awesome! We're now communicating via the relay!")
+				// technically in the example the peer reads using
+				// s.Read(make([]byte, 1))
+				s.Close()
+			})
+
+			log.Printf("Connected to relay. Attempting to set a reservation with the relay")
+			_, err = client.Reserve(context.Background(), h, relay1info)
+			if err != nil {
+				log.Printf("Recieving peer failed to receive a relay reservation from relay1. %v", err)
+				return
+			}
+
+			// Multiaddress was updated in peer/internal/internal/cli.go BUT
+			// I dont think we're actually updated it in h. Just stored it in dht.
+			// Technically, in the example, the new multiaddress was set up for the host AFTER it
+			// made a reservation with its old multiaddress
+
+			// Check if h is using the new multiaddress to connect to peers.
+			// When I set the multiaddress to ALWAYS update in cli.go, the following check confirms that
+			// we are NOT updating the multiaddress that h actually uses to connect
+			// Will look into it more later
+
+			fmt.Print("Multiaddress: ")
+			for _, addr := range h.Addrs() {
+				fmt.Printf("%s/p2p/%s\n", addr, h.ID())
+			}
+
+			log.Printf("Expected: /ip4/194.113.73.99/tcp/44981/p2p/QmZyLQd66AYP9sPxGbdjqZ5Ys76ZBaFFJy5PwzXxosXz74/p2p-circuit/p2p/%v", h.ID())
+
+			if err := h.Connect(ctx, peer); err != nil {
+				log.Printf("Failed to connect host and peer: %v", err)
+				return
+			}
+
+			log.Println("Got to the end of the connection function. Reservation was set")
 		}
 		time.Sleep(time.Second * 10)
 	}
@@ -340,7 +409,7 @@ func sendFileToConsumer(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func SetupRegisterFile(filePath string, fileName string, amountPerMB int64, ip string, port int32) error {
+func SetupRegisterFile(filePath string, fileName string, amountPerMB int64, hostMultiAddr string, port int32) error {
 	srcFilePath := fmt.Sprintf("./files/%s", fileName)
 	osFileInfo, err := os.Stat(srcFilePath)
 	if err != nil {
@@ -374,7 +443,7 @@ func SetupRegisterFile(filePath string, fileName string, amountPerMB int64, ip s
 		return err
 	}
 
-	serverStruct.Host.SetStreamHandler(protocol.ID("orcanet-fileshare/1.0/" + fileKey), HandleStoredFileStream)
+	serverStruct.Host.SetStreamHandler(protocol.ID("orcanet-fileshare/1.0/"+fileKey), HandleStoredFileStream)
 	return nil
 }
 
@@ -388,7 +457,7 @@ func HandleStoredFileStream(s network.Stream) {
 			if err != nil {
 				fmt.Println(err)
 				return
-			}	
+			}
 			lengthBytes = append(lengthBytes, b)
 		}
 
@@ -400,26 +469,26 @@ func HandleStoredFileStream(s network.Stream) {
 		err = json.Unmarshal(payload, &fileChunkReq)
 		if err != nil {
 			fmt.Println("Error unmarshaling JSON:", err)
-			return 
+			return
 		}
-		
+
 		orcaFileInfo := serverStruct.StoredFileInfoMap[fileChunkReq.FileHash]
 		chunkHash := orcaFileInfo.GetChunkHashes()[fileChunkReq.ChunkIndex]
 
 		file, err := os.Open("./files/stored/" + chunkHash)
 		if err != nil {
 			fmt.Println("Error:", err)
-			return 
+			return
 		}
 		defer file.Close()
 
 		fileChunk := orcaJobs.FileChunk{
-			FileHash: fileChunkReq.FileHash,
+			FileHash:   fileChunkReq.FileHash,
 			ChunkIndex: fileChunkReq.ChunkIndex,
-			MaxChunk: len(orcaFileInfo.GetChunkHashes()),
-			JobId: fileChunkReq.JobId,
+			MaxChunk:   len(orcaFileInfo.GetChunkHashes()),
+			JobId:      fileChunkReq.JobId,
 		}
-	
+
 		var chunkData bytes.Buffer
 
 		_, err = io.Copy(&chunkData, file)
@@ -430,7 +499,7 @@ func HandleStoredFileStream(s network.Stream) {
 
 		chunkDataBytes := chunkData.Bytes()
 		fileChunk.Data = chunkDataBytes
-		
+
 		payloadBytes, err := json.Marshal(fileChunk)
 		if err != nil {
 			fmt.Printf("Error marshaling json %s\n", err)

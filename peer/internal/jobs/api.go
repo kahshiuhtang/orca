@@ -4,8 +4,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"orca-peer/internal/fileshare"
 	"sync"
 	"time"
+
+	"github.com/libp2p/go-libp2p/core/host"
 )
 
 type Job struct {
@@ -17,12 +20,6 @@ type Job struct {
 	ProjectedCost   int    `json:"projectedCost"`
 	ETA             int    `json:"eta"`
 	PeerId          string `json:"peerId"`
-}
-
-type JobManager struct {
-	Jobs    []Job
-	Mutex   sync.Mutex
-	Changed bool
 }
 
 type FileChunkRequest struct {
@@ -39,22 +36,23 @@ type FileChunk struct {
 	Data       []byte `json:"data"`
 }
 
+type JobManager struct {
+	Jobs              []Job
+	Mutex             sync.Mutex
+	Changed           bool
+	Host              host.Host
+	StoredFileInfoMap *map[string]fileshare.FileInfo
+}
+
 var Manager JobManager
 
-func InitPeriodicJobSave() {
-	Manager = JobManager{
-		Jobs:    make([]Job, 0), // Initialize an empty slice of jobs
-		Mutex:   sync.Mutex{},   // Initialize a mutex
-		Changed: false,
-	}
-	for {
-		time.Sleep(10 * time.Second)
-		Manager.Mutex.Lock()
-		if Manager.Changed {
-			SaveHistory(Manager.Jobs)
+func GetJobStatus(jobId string) string {
+	for _, job := range Manager.Jobs {
+		if job.JobId == jobId {
+			return job.Status
 		}
-		Manager.Mutex.Unlock()
 	}
+	return ""
 }
 func UpdateJobStatus(jobId string, status string) error {
 	Manager.Mutex.Lock()
@@ -68,13 +66,23 @@ func UpdateJobStatus(jobId string, status string) error {
 	Manager.Mutex.Unlock()
 	return nil
 }
-func GetJobStatus(jobId string) string {
-	for _, job := range Manager.Jobs {
-		if job.JobId == jobId {
-			return job.Status
-		}
+func InitPeriodicJobSave(host host.Host, fileInfoMap *map[string]fileshare.FileInfo) {
+	Manager = JobManager{
+		Jobs:              make([]Job, 0), // Initialize an empty slice of jobs
+		Mutex:             sync.Mutex{},   // Initialize a mutex
+		Changed:           false,
+		Host:              host,
+		StoredFileInfoMap: fileInfoMap,
 	}
-	return ""
+
+	for {
+		time.Sleep(10 * time.Second)
+		Manager.Mutex.Lock()
+		if Manager.Changed {
+			SaveHistory(Manager.Jobs)
+		}
+		Manager.Mutex.Unlock()
+	}
 }
 func UpdateJobCost(jobId string, additionalCost int) error {
 	Manager.Mutex.Lock()
@@ -88,6 +96,7 @@ func UpdateJobCost(jobId string, additionalCost int) error {
 	Manager.Mutex.Unlock()
 	return nil
 }
+
 func writeStatusUpdate(w http.ResponseWriter, message string) {
 	responseMsg := map[string]interface{}{
 		"status": message,
@@ -133,7 +142,7 @@ func RemoveFromHistoryHandler(w http.ResponseWriter, r *http.Request) {
 func ClearHistoryHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodPatch {
 		ClearHistory()
-		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Content-Type", "application/octet-stream")
 		w.WriteHeader(http.StatusOK)
 		writeStatusUpdate(w, "success")
 	} else {
@@ -141,6 +150,15 @@ func ClearHistoryHandler(w http.ResponseWriter, r *http.Request) {
 		writeStatusUpdate(w, "Only PATCH requests will be handled.")
 		return
 	}
+}
+
+type AddJobReqPayload struct {
+	FileHash string `json:"fileHash"`
+	PeerId   string `json:"peer"`
+}
+
+type AddJobResPayload struct {
+	JobId string `json:"jobID"`
 }
 
 type JobInfoReqPayload struct {
@@ -163,7 +181,7 @@ func JobInfoHandler(w http.ResponseWriter, r *http.Request) {
 			writeStatusUpdate(w, "Failed to convert JSON Data into a string")
 			return
 		}
-		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Content-Type", "application/octet-stream")
 		w.WriteHeader(http.StatusOK)
 		w.Write(jsonData)
 	} else {
@@ -174,7 +192,7 @@ func JobInfoHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func StartJobsHandler(w http.ResponseWriter, r *http.Request) {
-	if r.Method == http.MethodPatch {
+	if r.Method == http.MethodPut {
 		var jobIds []JobInfoReqPayload
 		decoder := json.NewDecoder(r.Body)
 		if err := decoder.Decode(&jobIds); err != nil {

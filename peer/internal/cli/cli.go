@@ -4,10 +4,14 @@ import (
 	"bufio"
 	"crypto/rsa"
 	"crypto/x509"
+	"log"
+
+	// "crypto/x509"
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
+
+	// "log"
 	"net"
 	"net/http"
 	orcaBlockchain "orca-peer/internal/blockchain"
@@ -123,15 +127,25 @@ func StartCLI(bootstrapAddress *string, pubKey *rsa.PublicKey, privKey *rsa.Priv
 	for _, addr := range host.Addrs() {
 		if !strings.Contains(fmt.Sprintf("%s", addr), "127.0.0.1") {
 			hostMultiAddr = fmt.Sprintf("%s/p2p/%s", addr, host.ID())
-			//fmt.Println(hostMultiAddr)
 		}
-		//fmt.Printf("%s/p2p/%s\n", addr, host.ID())
+		fmt.Printf("%s/p2p/%s\n", addr, host.ID())
 	}
 
 	Client = orcaClient.NewClient("files/names/")
 	Client.PrivateKey = privKey
 	Client.PublicKey = pubKey
 	Client.Host = host
+	if detectNAT() {
+		// if true {
+		addresses := []string{
+			"/ip4/194.113.73.99/tcp/44981/p2p/QmZyLQd66AYP9sPxGbdjqZ5Ys76ZBaFFJy5PwzXxosXz74",
+			"/ip4/209.151.148.27/tcp/44981/p2p/QmcAhU6MTzDeDvPhJgbk83PpT5dyB5LrZdSYaZW9K7gJm1",
+			"/ip4/209.151.155.108/tcp/44981/p2p/QmYGQgBaiukGEUYqsoLAVerqBooERL13btPnLDogshiWi4",
+		}
+		selected := addresses[0]
+		hostMultiAddr = fmt.Sprintf("%s/p2p-circuit/p2p/%s", selected, host.ID())
+		//hostMultiAddr, _ = multiaddr.NewMultiaddr(selected + "/p2p-circuit/p2p/" + host.ID())
+	}
 	go orcaServer.StartServer(orcaServer.Settings(settings), serverReady, &confirming, &confirmation, libp2pPrivKey, Client, startAPIRoutes, host, hostMultiAddr)
 	<-serverReady
 	orcaBlockchain.InitBlockchainStats(pubKey)

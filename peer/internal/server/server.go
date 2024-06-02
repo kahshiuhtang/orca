@@ -8,7 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"math/big"
 	"net/http"
 	orcaClient "orca-peer/internal/client"
@@ -19,9 +18,10 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/google/uuid"
 	libp2pcrypto "github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/host"
+
+	"github.com/google/uuid"
 )
 
 const keyServerAddr = "serverAddr"
@@ -112,12 +112,13 @@ func StartServer(settings Settings, serverReady chan bool, confirming *bool, con
 	server := HTTPServer{
 		storage: hash.NewDataStore("files/stored/"),
 	}
-	go orcaJobs.InitPeriodicJobSave()
 	Client = client
 	PassKey = settings.BlockchainPassword
 	fileShareServer := FileShareServerNode{
 		StoredFileInfoMap: make(map[string]fileshare.FileInfo),
 	}
+
+	go orcaJobs.InitPeriodicJobSave(host, &fileShareServer.StoredFileInfoMap)
 
 	//Why are there routes in 2 different spots?
 	http.HandleFunc("/requestFile/", func(w http.ResponseWriter, r *http.Request) {
@@ -135,7 +136,7 @@ func StartServer(settings Settings, serverReady chan bool, confirming *bool, con
 	http.HandleFunc("/add-job", AddJobHandler)
 
 	fmt.Printf("HTTP Listening on port %s...\n", settings.HTTPAPIPort)
-	go CreateMarketServer(libp2pPrivKey, settings.MarketDHTPort, settings.MarketRPCPort, serverReady, &fileShareServer, host, hostMultiAddr)
+	go CreateMarketServer(settings.MarketDHTPort, settings.MarketRPCPort, serverReady, &fileShareServer, host, hostMultiAddr, libp2pPrivKey)
 	startAPIRoutes(&fileShareServer.StoredFileInfoMap)
 
 	http.ListenAndServe(":"+settings.HTTPAPIPort, nil)
@@ -376,61 +377,53 @@ func ConvertKeyToString(n *big.Int, e int) string {
 	return publicKeyString
 }
 func jobRoutine(jobId string, hash string, peerId string) {
-	holders, err := SetupCheckHolders(hash)
-	if err != nil {
-		fmt.Printf("Error finding holders for file: %x", err)
-		return
-	}
-	var bestHolder *fileshare.User
-	var selectedHolder *fileshare.User
-	bestHolder = nil
-	selectedHolder = nil
-	for _, holder := range holders.Holders {
-		if bestHolder == nil {
-			bestHolder = holder
-		} else if holder.GetPrice() < bestHolder.GetPrice() {
-			bestHolder = holder
-		}
-		if string(holder.Id) == peerId {
-			selectedHolder = holder
-		}
-	}
-	if bestHolder == nil && selectedHolder == nil {
-		fmt.Println("Unable to find holder for this hash.")
-		return
-	}
-	if selectedHolder != nil {
-		bestHolder = selectedHolder
-	}
-	fmt.Printf("%s - %d OrcaCoin\n", bestHolder.GetIp(), bestHolder.GetPrice())
+	// holders, err := SetupCheckHolders(hash)
+	// if err != nil {
+	// 	fmt.Printf("Error finding holders for file: %x", err)
+	// 	return
+	// }
+	// var bestHolder *fileshare.User
+	// var selectedHolder *fileshare.User
+	// bestHolder = nil
+	// selectedHolder = nil
+	// for _, holder := range holders.Holders {
+	// 	if bestHolder == nil {
+	// 		bestHolder = holder
+	// 	} else if holder.GetPrice() < bestHolder.GetPrice() {
+	// 		bestHolder = holder
+	// 	}
+	// 	if string(holder.Id) == peerId {
+	// 		selectedHolder = holder
+	// 	}
+	// }
+	// if bestHolder == nil && selectedHolder == nil {
+	// 	fmt.Println("Unable to find holder for this hash.")
+	// 	return
+	// }
+	// if selectedHolder != nil {
+	// 	bestHolder = selectedHolder
+	// }
+	// fmt.Printf("%s - %d OrcaCoin\n", bestHolder.GetIp(), bestHolder.GetPrice())
 
-	pubKeyInterface, err := x509.ParsePKIXPublicKey(bestHolder.Id)
-	if err != nil {
-		log.Fatal("failed to parse DER encoded public key: ", err)
-	}
-	rsaPubKey, ok := pubKeyInterface.(*rsa.PublicKey)
-	if !ok {
-		log.Fatal("not an RSA public key")
-	}
-	key := ConvertKeyToString(rsaPubKey.N, rsaPubKey.E)
-	err = Client.GetFileOnce(bestHolder.GetIp(), bestHolder.GetPort(), hash, key, fmt.Sprintf("%d", bestHolder.GetPrice()), PassKey, jobId)
-	if err != nil {
-		fmt.Printf("Error getting file %s", err)
-	}
-}
-
-type AddJobReqPayload struct {
-	FileHash string `json:"fileHash"`
-	PeerId   string `json:"peer"`
-}
-
-type AddJobResPayload struct {
-	JobId string `json:"jobID"`
+	// pubKeyInterface, err := x509.ParsePKIXPublicKey(bestHolder.Id)
+	// if err != nil {
+	// 	log.Fatal("failed to parse DER encoded public key: ", err)
+	// }
+	// rsaPubKey, ok := pubKeyInterface.(*rsa.PublicKey)
+	// if !ok {
+	// 	log.Fatal("not an RSA public key")
+	// }
+	// key := ConvertKeyToString(rsaPubKey.N, rsaPubKey.E)
+	//err = Client.GetFileOnce(bestHolder.GetIp(), bestHolder.GetPort(), hash, key, fmt.Sprintf("%d", bestHolder.GetPrice()), PassKey, jobId)
+	go orcaJobs.StartJob(jobId)
+	// if err != nil {
+	// 	fmt.Printf("Error getting file %s", err)
+	// }
 }
 
 func AddJobHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodPut {
-		var payload AddJobReqPayload
+		var payload orcaJobs.AddJobReqPayload
 		decoder := json.NewDecoder(r.Body)
 		if err := decoder.Decode(&payload); err != nil {
 			w.WriteHeader(http.StatusBadRequest)
@@ -450,9 +443,9 @@ func AddJobHandler(w http.ResponseWriter, r *http.Request) {
 			PeerId:          payload.PeerId,
 		}
 		orcaJobs.AddJob(newJob)
+
 		go jobRoutine(newJob.JobId, payload.FileHash, payload.PeerId)
-		w.WriteHeader(http.StatusOK)
-		response := AddJobResPayload{JobId: newJob.JobId}
+		response := orcaJobs.AddJobResPayload{JobId: newJob.JobId}
 		jsonData, err := json.Marshal(response)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
