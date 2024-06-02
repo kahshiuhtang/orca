@@ -26,6 +26,7 @@ import (
 	"github.com/libp2p/go-libp2p"
 	libp2pcrypto "github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/multiformats/go-multiaddr"
+	"github.com/spf13/cobra"
 )
 
 var (
@@ -121,9 +122,9 @@ func StartCLI(bootstrapAddress *string, pubKey *rsa.PublicKey, privKey *rsa.Priv
 	for _, addr := range host.Addrs() {
 		if !strings.Contains(fmt.Sprintf("%s", addr), "127.0.0.1") {
 			hostMultiAddr = fmt.Sprintf("%s/p2p/%s", addr, host.ID())
-			fmt.Println(hostMultiAddr)
+			//fmt.Println(hostMultiAddr)
 		}
-		fmt.Printf("%s/p2p/%s\n", addr, host.ID())
+		//fmt.Printf("%s/p2p/%s\n", addr, host.ID())
 	}
 
 	Client = orcaClient.NewClient("files/names/")
@@ -133,105 +134,110 @@ func StartCLI(bootstrapAddress *string, pubKey *rsa.PublicKey, privKey *rsa.Priv
 	go orcaServer.StartServer(orcaServer.Settings(settings), serverReady, &confirming, &confirmation, libp2pPrivKey, Client, startAPIRoutes, host, hostMultiAddr)
 	<-serverReady
 	orcaBlockchain.InitBlockchainStats(pubKey)
-	fmt.Println("Welcome to Orcanet!")
-	fmt.Println("Dive In and Explore! Type 'help' for available commands.")
+	var cmdLocation = &cobra.Command{
+		Use:   "location",
+		Short: "Gets current location of THIS peer node",
+		Long:  `location will get the current location of this peer node.`,
+		Args:  cobra.MinimumNArgs(0),
+		Run: func(cmd *cobra.Command, args []string) {
+			fmt.Println(orcaStatus.GetLocationData())
+		},
+	}
 
-	reader := bufio.NewReader(os.Stdin)
-
-	for {
-		fmt.Print("> ")
-		text, err := reader.ReadString('\n')
-		if err != nil {
-			fmt.Fprintln(os.Stderr, "Error reading from stdin:", err)
-			continue
-		}
-
-		text = strings.TrimSpace(text)
-		parts := strings.Fields(text)
-		if len(parts) == 0 {
-			continue
-		}
-
-		command := parts[0]
-		args := parts[1:]
-
-		if confirming {
-			switch command {
-			case "yes":
-				confirmation = "yes"
-			default:
-				confirmation = "no"
+	var cmdGet = &cobra.Command{
+		Use:   "get [fileHash | fileName]",
+		Short: "Get either a hash of a file or an entire file from the DHT network.",
+		Long: `echo is for echoing anything back.
+	Echo works a lot like print, except it has a child command.`,
+		Args: cobra.MinimumNArgs(1),
+		Run: func(cmd *cobra.Command, args []string) {
+			holders, err := server.SetupCheckHolders(args[0])
+			if err != nil {
+				fmt.Printf("Error finding holders for file: %x", err)
+				return
 			}
-			continue
-		}
-
-		switch command {
-		case "get":
-			if len(args) == 1 {
-				holders, err := server.SetupCheckHolders(args[0])
-				if err != nil {
-					fmt.Printf("Error finding holders for file: %x", err)
-					continue
-				}
-				var bestHolder *fileshare.User
-				bestHolder = nil
-				for _, holder := range holders.Holders {
-					if bestHolder == nil {
-						bestHolder = holder
-					} else if holder.GetPrice() < bestHolder.GetPrice() {
-						bestHolder = holder
-					}
-				}
+			var bestHolder *fileshare.User
+			bestHolder = nil
+			for _, holder := range holders.Holders {
 				if bestHolder == nil {
-					fmt.Println("Unable to find holder for this hash.")
-					continue
+					bestHolder = holder
+				} else if holder.GetPrice() < bestHolder.GetPrice() {
+					bestHolder = holder
 				}
-				fmt.Printf("%s - %d OrcaCoin\n", bestHolder.GetIp(), bestHolder.GetPrice())
-				pubKeyInterface, err := x509.ParsePKIXPublicKey(bestHolder.Id)
-				if err != nil {
-					log.Fatal("failed to parse DER encoded public key: ", err)
-				}
-				rsaPubKey, ok := pubKeyInterface.(*rsa.PublicKey)
-				if !ok {
-					log.Fatal("not an RSA public key")
-				}
-				key := orcaServer.ConvertKeyToString(rsaPubKey.N, rsaPubKey.E)
-				err = Client.GetFileOnce(bestHolder.GetIp(), bestHolder.GetPort(), args[0], key, fmt.Sprintf("%d", bestHolder.GetPrice()), settings.BlockchainPassword, "")
-
-				if err != nil {
-					fmt.Printf("Error getting file %s", err)
-				}
-			} else {
-				fmt.Println("Usage: get [fileHash]")
 			}
-		case "store":
-			if len(args) == 2 {
-				fileName := args[0]
-				filePath := "./files/" + fileName
-				if _, err := os.Stat(filePath); err == nil {
-
-				} else if os.IsNotExist(err) {
-					fmt.Println("file does not exist inside files folder")
-					continue
-				} else {
-					fmt.Println("error checking file's existence, please try again")
-					continue
-				}
-				costPerMB, err := strconv.ParseInt(args[1], 10, 64)
-				if err != nil {
-					fmt.Println("Error parsing in cost per MB: must be a int64", err)
-					continue
-				}
-				err = server.SetupRegisterFile(filePath, fileName, costPerMB, Ip, int32(Port))
-				if err != nil {
-					fmt.Printf("Unable to register file on DHT: %s", err)
-				} else {
-					fmt.Println("Sucessfully registered file on DHT.")
-				}
-			} else {
-				fmt.Println("Usage: store [fileName] [amount]")
+			if bestHolder == nil {
+				fmt.Println("Unable to find holder for this hash.")
+				return
 			}
-		case "import":
+			fmt.Printf("%s - %d OrcaCoin\n", bestHolder.GetIp(), bestHolder.GetPrice())
+			pubKeyInterface, err := x509.ParsePKIXPublicKey(bestHolder.Id)
+			if err != nil {
+				log.Fatal("failed to parse DER encoded public key: ", err)
+			}
+			rsaPubKey, ok := pubKeyInterface.(*rsa.PublicKey)
+			if !ok {
+				log.Fatal("not an RSA public key")
+			}
+			key := orcaServer.ConvertKeyToString(rsaPubKey.N, rsaPubKey.E)
+			err = Client.GetFileOnce(bestHolder.GetIp(), bestHolder.GetPort(), args[0], key, fmt.Sprintf("%d", bestHolder.GetPrice()), settings.BlockchainPassword, "")
+
+			if err != nil {
+				fmt.Printf("Error getting file %s", err)
+			}
+		},
+	}
+
+	var cmdStore = &cobra.Command{
+		Use:   "store",
+		Short: "Gets current location of THIS peer node",
+		Long:  `location will get the current location of this peer node.`,
+		Args:  cobra.MinimumNArgs(2),
+		Run: func(cmd *cobra.Command, args []string) {
+			fileName := args[0]
+			filePath := "./files/" + fileName
+			if _, err := os.Stat(filePath); err == nil {
+
+			} else if os.IsNotExist(err) {
+				fmt.Println("file does not exist inside files folder")
+				return
+			} else {
+				fmt.Println("error checking file's existence, please try again")
+				return
+			}
+			costPerMB, err := strconv.ParseInt(args[1], 10, 64)
+			if err != nil {
+				fmt.Println("Error parsing in cost per MB: must be a int64", err)
+				return
+			}
+			err = server.SetupRegisterFile(filePath, fileName, costPerMB, Ip, int32(Port))
+			if err != nil {
+				fmt.Printf("Unable to register file on DHT: %s", err)
+			} else {
+				fmt.Println("Sucessfully registered file on DHT.")
+			}
+		},
+	}
+	var cmdNetwork = &cobra.Command{
+		Use:   "network",
+		Short: "Gets current location of THIS peer node",
+		Long:  `location will get the current location of this peer node.`,
+		Args:  cobra.MinimumNArgs(0),
+		Run: func(cmd *cobra.Command, args []string) {
+			fmt.Println("Testing Network Speeds...")
+			networkData := orcaStatus.GetNetworkInfo()
+			if networkData.Success {
+				fmt.Printf("Latency: %fms, Download: %fMbps, Upload: %fMbps\n", networkData.LatencyMs, networkData.DownloadSpeedMbps, networkData.UploadSpeedMbps)
+			} else {
+				fmt.Println("Unable to test network speeds. Please try again")
+			}
+		},
+	}
+	var cmdImport = &cobra.Command{
+		Use:   "import",
+		Short: "Gets current location of THIS peer node",
+		Long:  `location will get the current location of this peer node.`,
+		Args:  cobra.MinimumNArgs(1),
+		Run: func(cmd *cobra.Command, args []string) {
 			if len(args) == 1 {
 				err := Client.ImportFile(args[0])
 				if err != nil {
@@ -240,93 +246,57 @@ func StartCLI(bootstrapAddress *string, pubKey *rsa.PublicKey, privKey *rsa.Priv
 			} else {
 				fmt.Println("Usage: import [filepath]")
 			}
-		case "location":
-			fmt.Println(orcaStatus.GetLocationData())
-		case "network":
-			fmt.Println("Testing Network Speeds...")
-			networkData := orcaStatus.GetNetworkInfo()
-			if networkData.Success {
-				fmt.Printf("Latency: %fms, Download: %fMbps, Upload: %fMbps\n", networkData.LatencyMs, networkData.DownloadSpeedMbps, networkData.UploadSpeedMbps)
-			} else {
-				fmt.Println("Unable to test network speeds. Please try again")
-			}
-
-		case "list":
+		},
+	}
+	var cmdList = &cobra.Command{
+		Use:   "list",
+		Short: "Gets current location of THIS peer node",
+		Long:  `location will get the current location of this peer node.`,
+		Args:  cobra.MinimumNArgs(0),
+		Run: func(cmd *cobra.Command, args []string) {
 			files := orcaStore.GetAllLocalFiles()
 			fmt.Print("Files found: \n")
 			for _, file := range files {
 				fmt.Println(file.Name)
 			}
-		case "hash":
+		},
+	}
+
+	var cmdHash = &cobra.Command{
+		Use:   "hash",
+		Short: "Gets current location of THIS peer node",
+		Long:  `location will get the current location of this peer node.`,
+		Args:  cobra.MinimumNArgs(1),
+		Run: func(cmd *cobra.Command, args []string) {
 			if len(args) == 1 {
 				orcaHash.HashFile(args[0])
 			} else {
 				fmt.Println("Usage: hash [fileName]")
 			}
-		case "send":
+		},
+	}
+	var cmdSend = &cobra.Command{
+		Use:   "send",
+		Short: "Gets current location of THIS peer node",
+		Long:  `location will get the current location of this peer node.`,
+		Args:  cobra.MinimumNArgs(1),
+		Run: func(cmd *cobra.Command, args []string) {
 			if len(args) == 3 {
 				cost, err := strconv.ParseFloat(args[0], 64)
 				if err != nil {
 					fmt.Println("Error parsing amount to send")
-					continue
+					return
 				}
 				orcaClient.SendTransaction(cost, args[1], args[2], pubKey, privKey)
 			} else {
 				fmt.Println("Usage: send [amount] [ip] [port]")
 			}
-		case "exit":
-			fmt.Println("Exiting...")
-
-			for _, fileInfo := range orcaStore.GetAllLocalFiles() {
-				filePath := "./files/stored/" + fileInfo.Name
-				err := os.Remove(filePath)
-				if err != nil {
-					fmt.Printf("Error cleaning up stored files: %s\n", err)
-				}
-			}
-
-			err = orcaNetAPIProc.Process.Signal(os.Interrupt)
-			if err != nil {
-				fmt.Printf("Error killing OrcaNet: %s\n", err)
-			}
-
-			return
-		case "getdir":
-			if len(args) == 3 {
-				port, err := strconv.ParseInt(args[1], 10, 32)
-				if err != nil {
-					fmt.Printf("Invalid port: %s\n", err)
-					fmt.Println()
-					continue
-				}
-
-				go Client.GetDirectory(args[0], int32(port), args[2])
-			} else {
-				fmt.Println("Usage: getdir [ip] [port] [path]")
-			}
-		case "storedir":
-			if len(args) == 3 {
-				go Client.StoreDirectory(args[0], args[1], args[2])
-			} else {
-				fmt.Println("Usage: storedir [ip] [port] [path]")
-			}
-		case "help":
-			fmt.Println("COMMANDS:")
-			fmt.Println(" get [fileHash]                 Request a file from DHT")
-			fmt.Println(" store [fileName] [amount]      Store a file on DHT")
-			fmt.Println(" getdir [ip] [port] [path]      Request a directory")
-			fmt.Println(" storedir [ip] [port] [path]    Request storage of a directory")
-			fmt.Println(" import [filepath]              Import a file")
-			fmt.Println(" send [amount] [ip]             Send an amount of money to network")
-			fmt.Println(" hash [fileName]                Get the hash of a file")
-			fmt.Println(" list                           List all files you are storing")
-			fmt.Println(" location                       Print your location")
-			fmt.Println(" network                        Test speed of network")
-			fmt.Println(" exit                           Exit the program")
-		default:
-			fmt.Println("Unknown command. Type 'help' for available commands.")
-		}
+		},
 	}
+
+	var rootCmd = &cobra.Command{Use: "orca"}
+	rootCmd.AddCommand(cmdLocation, cmdGet, cmdStore, cmdNetwork, cmdImport, cmdList, cmdHash, cmdSend)
+	rootCmd.Execute()
 }
 
 // Ask user to enter a port and returns it
