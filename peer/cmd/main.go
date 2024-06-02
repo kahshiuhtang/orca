@@ -1,7 +1,6 @@
 package main
 
 import (
-	"flag"
 	"fmt"
 	orcaAPI "orca-peer/internal/api"
 	orcaCLI "orca-peer/internal/cli"
@@ -13,8 +12,7 @@ import (
 var boostrapNodeAddress string
 
 func main() {
-	flag.StringVar(&boostrapNodeAddress, "bootstrap", "", "Give address to boostrap.")
-	flag.Parse()
+	boostrapNodeAddress = ""
 	publicKey, privateKey := orcaHash.LoadInKeys()
 	os.MkdirAll("./files/stored/", 0755)
 

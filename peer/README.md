@@ -1,12 +1,27 @@
+# Peer Node CLI
 
-## CLI interface
+To run the peer node, you can create an exectuable and then use the exectuable's CLI
+
+For example:
+
+```bash
+$ make build
+
+$ bin/peer [arguments]
+```
+
+You can also combine this into one step with:
+
+```bash
+$ make all [arguments]
+```
+
+## CLI functions
 
 Get a file from the DHT. You should pass a specific hash.
 
 ```bash
-
 $ get [fileHash] 
-
 ```
 
 Storing a file in the DHT for a given price. You should pass ONLY the file name, given the file is in the files folder (inside peers).
@@ -24,17 +39,13 @@ $ import [filepath]
 Send a certain amount of coin to an address
 
 ```bash
-
 $ send [amount] [ip] 
-
 ```
 
 Hash a file. Only files inside the files folder can be found. Only pass relative paths. You should not need to hash any files: this should be handled internally.
 
 ```bash
-
 $ hash [filename]
-
 ```
 
 Listing all files stored for IPFS
@@ -55,10 +66,10 @@ Testing network speeds
 $ network
 ```
 
-Exiting Program
+Runs the peer node as a backend application for a front end GUI
 
 ```bash
-$ exit
+$ run
 ```
 
 #### File System:
@@ -82,16 +93,3 @@ $ exit
 * Inside the config file, set your public key and private key location. If you don't want to, the CLI will generate a key-pair for you.
 
 * Only .txt, .json and .mp4 file formats are currently supported.
-
-
-## HTTP Functionality
-
-Here is all of the routes available on the HTTP server that is started when the peer-node loads. Most routes should return 400 if an issue with the parameters sent by the client did not work, 405 if the wrong method type (GET, POST) was used, 500 if there was an error creating, searching or opening files and 200 if everything is successful. If a response is sent inside of an array, that indicates that at minimum, 0 json objects could be sent but more than 1 json object could also be inside of that json array. If not explicitly stated, the Response Body should be a json object with a single field name "status", explaing the current status of the request. Furthermore, when any response code other than 200 is sent, there should be this same json object sent inside the Response Body.
-
-The blockchain routes that currently exist are as follows. We still need to fix it to match the specification.
-
-/getBlockchainInfo
-/getNewAddress
-/getBalance
-/mine
-/sendToAddress

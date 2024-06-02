@@ -20,8 +20,10 @@ import (
 	orcaStore "orca-peer/internal/store"
 	"os"
 	"os/exec"
+	"os/signal"
 	"strconv"
 	"strings"
+	"syscall"
 
 	"github.com/libp2p/go-libp2p"
 	libp2pcrypto "github.com/libp2p/go-libp2p/core/crypto"
@@ -75,7 +77,6 @@ func loadSetttings() (Settings, error) {
 	return settings, nil
 }
 func StartCLI(bootstrapAddress *string, pubKey *rsa.PublicKey, privKey *rsa.PrivateKey, orcaNetAPIProc *exec.Cmd, startAPIRoutes func(*map[string]fileshare.FileInfo)) {
-	fmt.Println("Loading...")
 	settings, err := loadSetttings()
 	if err != nil {
 		log.Fatal("unable to load settings")
@@ -137,7 +138,6 @@ func StartCLI(bootstrapAddress *string, pubKey *rsa.PublicKey, privKey *rsa.Priv
 	var cmdLocation = &cobra.Command{
 		Use:   "location",
 		Short: "Gets current location of THIS peer node",
-		Long:  `location will get the current location of this peer node.`,
 		Args:  cobra.MinimumNArgs(0),
 		Run: func(cmd *cobra.Command, args []string) {
 			fmt.Println(orcaStatus.GetLocationData())
@@ -147,9 +147,7 @@ func StartCLI(bootstrapAddress *string, pubKey *rsa.PublicKey, privKey *rsa.Priv
 	var cmdGet = &cobra.Command{
 		Use:   "get [fileHash | fileName]",
 		Short: "Get either a hash of a file or an entire file from the DHT network.",
-		Long: `echo is for echoing anything back.
-	Echo works a lot like print, except it has a child command.`,
-		Args: cobra.MinimumNArgs(1),
+		Args:  cobra.MinimumNArgs(1),
 		Run: func(cmd *cobra.Command, args []string) {
 			holders, err := server.SetupCheckHolders(args[0])
 			if err != nil {
@@ -189,9 +187,11 @@ func StartCLI(bootstrapAddress *string, pubKey *rsa.PublicKey, privKey *rsa.Priv
 
 	var cmdStore = &cobra.Command{
 		Use:   "store",
-		Short: "Gets current location of THIS peer node",
-		Long:  `location will get the current location of this peer node.`,
-		Args:  cobra.MinimumNArgs(2),
+		Short: "Inform the DHT that a specific file will be stored by the peer node",
+		Long: `The DHT will keep track of files that each peer has.
+				When a file is requested, the DHT will be able to inform the requester of potential peer nodes that have the file.
+				The DHT also keeps track of prices and specific hashes.`,
+		Args: cobra.MinimumNArgs(2),
 		Run: func(cmd *cobra.Command, args []string) {
 			fileName := args[0]
 			filePath := "./files/" + fileName
@@ -219,8 +219,7 @@ func StartCLI(bootstrapAddress *string, pubKey *rsa.PublicKey, privKey *rsa.Priv
 	}
 	var cmdNetwork = &cobra.Command{
 		Use:   "network",
-		Short: "Gets current location of THIS peer node",
-		Long:  `location will get the current location of this peer node.`,
+		Short: "Print out information about the network status of the peer node",
 		Args:  cobra.MinimumNArgs(0),
 		Run: func(cmd *cobra.Command, args []string) {
 			fmt.Println("Testing Network Speeds...")
@@ -233,26 +232,27 @@ func StartCLI(bootstrapAddress *string, pubKey *rsa.PublicKey, privKey *rsa.Priv
 		},
 	}
 	var cmdImport = &cobra.Command{
-		Use:   "import",
-		Short: "Gets current location of THIS peer node",
-		Long:  `location will get the current location of this peer node.`,
-		Args:  cobra.MinimumNArgs(1),
+		Use:   "import [filePath]",
+		Short: "Import a file from your local computer into the peer node file system.",
+		Long: `Files need to be imported into the file system in order to be sent to other peer nodes.
+				You are able to remove files from the file system.
+				It is also possible to manually move files into the peer node.`,
+		Args: cobra.MinimumNArgs(1),
 		Run: func(cmd *cobra.Command, args []string) {
-			if len(args) == 1 {
-				err := Client.ImportFile(args[0])
-				if err != nil {
-					fmt.Println(err)
-				}
-			} else {
-				fmt.Println("Usage: import [filepath]")
+			err := Client.ImportFile(args[0])
+			if err != nil {
+				fmt.Println(err)
 			}
 		},
 	}
 	var cmdList = &cobra.Command{
 		Use:   "list",
-		Short: "Gets current location of THIS peer node",
-		Long:  `location will get the current location of this peer node.`,
-		Args:  cobra.MinimumNArgs(0),
+		Short: "List all files that are being stored by the peer node",
+		Long: `Within the 'files' directory, there is a mini file system that tracks all files that peer node has requested and stored.
+				A stored file is a file that the peer node makes accessible to everyone.
+				A requested file is a file that has been downloaded by the peer node from another peer node.
+				There are also parts of a file, called hashes, stored in the file directory`,
+		Args: cobra.MinimumNArgs(0),
 		Run: func(cmd *cobra.Command, args []string) {
 			files := orcaStore.GetAllLocalFiles()
 			fmt.Print("Files found: \n")
@@ -263,39 +263,43 @@ func StartCLI(bootstrapAddress *string, pubKey *rsa.PublicKey, privKey *rsa.Priv
 	}
 
 	var cmdHash = &cobra.Command{
-		Use:   "hash",
-		Short: "Gets current location of THIS peer node",
-		Long:  `location will get the current location of this peer node.`,
+		Use:   "hash [filePath]",
+		Short: "Return the hash of a file",
 		Args:  cobra.MinimumNArgs(1),
 		Run: func(cmd *cobra.Command, args []string) {
-			if len(args) == 1 {
-				orcaHash.HashFile(args[0])
-			} else {
-				fmt.Println("Usage: hash [fileName]")
-			}
+			orcaHash.HashFile(args[0])
 		},
 	}
 	var cmdSend = &cobra.Command{
-		Use:   "send",
-		Short: "Gets current location of THIS peer node",
-		Long:  `location will get the current location of this peer node.`,
-		Args:  cobra.MinimumNArgs(1),
+		Use:   "send [amount] [ip] [port]",
+		Short: "Sends some amount of orcaCoin currency to an address, defined by an ip + port",
+		Args:  cobra.MinimumNArgs(3),
 		Run: func(cmd *cobra.Command, args []string) {
-			if len(args) == 3 {
-				cost, err := strconv.ParseFloat(args[0], 64)
-				if err != nil {
-					fmt.Println("Error parsing amount to send")
-					return
-				}
-				orcaClient.SendTransaction(cost, args[1], args[2], pubKey, privKey)
-			} else {
-				fmt.Println("Usage: send [amount] [ip] [port]")
+			cost, err := strconv.ParseFloat(args[0], 64)
+			if err != nil {
+				fmt.Println("Error parsing amount to send")
+				return
 			}
+			orcaClient.SendTransaction(cost, args[1], args[2], pubKey, privKey)
+		},
+	}
+	var cmdRun = &cobra.Command{
+		Use:   "run",
+		Short: "Run the peer node as a backend server",
+		Long: `This will run the peer node until SIGINT or SIGTERM is received in the terminal.
+				This functionality is provided to allow for the peer node to run as a backend for the GUI.
+				You will not be able to interact with the peer node in this state without using API calls.
+				`,
+		Args: cobra.MinimumNArgs(0),
+		Run: func(cmd *cobra.Command, args []string) {
+			sigs := make(chan os.Signal, 1)
+			signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
+			<-sigs
 		},
 	}
 
 	var rootCmd = &cobra.Command{Use: "orca"}
-	rootCmd.AddCommand(cmdLocation, cmdGet, cmdStore, cmdNetwork, cmdImport, cmdList, cmdHash, cmdSend)
+	rootCmd.AddCommand(cmdLocation, cmdGet, cmdStore, cmdNetwork, cmdImport, cmdList, cmdHash, cmdSend, cmdRun)
 	rootCmd.Execute()
 }
 
