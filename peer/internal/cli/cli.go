@@ -18,6 +18,7 @@ import (
 	orcaClient "orca-peer/internal/client"
 	"orca-peer/internal/fileshare"
 	orcaHash "orca-peer/internal/hash"
+	"orca-peer/internal/relay"
 	"orca-peer/internal/server"
 	orcaServer "orca-peer/internal/server"
 	orcaStatus "orca-peer/internal/status"
@@ -311,9 +312,23 @@ func StartCLI(bootstrapAddress *string, pubKey *rsa.PublicKey, privKey *rsa.Priv
 			<-sigs
 		},
 	}
+	var cmdRelay = &cobra.Command{
+		Use:   "relay",
+		Short: "Run the node as a relay server for other peers",
+		Long: `This will run the peer node until SIGINT or SIGTERM is received in the terminal.
+				This functionality is provided to allow for the peer node to run as a relay server for any nodes behind a NAT.
+				`,
+		Args: cobra.MinimumNArgs(0),
+		Run: func(cmd *cobra.Command, args []string) {
+			go relay.SetupRelay()
+			sigs := make(chan os.Signal, 1)
+			signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
+			<-sigs
+		},
+	}
 
 	var rootCmd = &cobra.Command{Use: "orca"}
-	rootCmd.AddCommand(cmdLocation, cmdGet, cmdStore, cmdNetwork, cmdImport, cmdList, cmdHash, cmdSend, cmdRun)
+	rootCmd.AddCommand(cmdLocation, cmdGet, cmdStore, cmdNetwork, cmdImport, cmdList, cmdHash, cmdSend, cmdRun, cmdRelay)
 	rootCmd.Execute()
 }
 

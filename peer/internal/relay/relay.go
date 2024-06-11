@@ -106,8 +106,13 @@ func createRelayServer() []byte {
 		ID:    relay1.ID(),
 		Addrs: relay1.Addrs(),
 	}
+	log.Println("Successfully setup relay service, hit the {ip}:45677/relay to get relay information")
+	log.Println("Relay ID:")
 	log.Println(relay1.ID())
+	log.Println()
+	log.Println("Relay Listen Addresses:")
 	log.Println(relay1.Addrs())
+	log.Println()
 	addrInfoJSON, err := json.Marshal(relay1info)
 	if err != nil {
 		fmt.Println("Error marshaling AddrInfo:", err)
